@@ -6,6 +6,26 @@ const NUM_REGS: usize = 16;
 const STACK_SIZE: usize = 16;
 const NUM_KEYS: usize = 16;
 const START_ADDR: u16 = 0x200;
+const FONTSET_SIZE: usize = 80;
+
+const FONTSET: [u8; FONTSET_SIZE] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80 // F
+];
 
 pub struct Emu {
     pc: u16,
@@ -25,7 +45,7 @@ impl Emu {
      * Constructor
      */
     pub fn new() -> Self {
-        Self {
+        new_emu = Self {
             pc: START_ADDR,
             ram: [0; RAM_SIZE],
             screen: [false; SCREEN_HEIGHT * SCREEN_WIDTH],
@@ -36,6 +56,133 @@ impl Emu {
             keys: [false; NUM_KEYS],
             dt: 0,
             st: 0,
+        };
+
+        new_emu.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+
+        return new_emu;
+    }
+
+    /**
+    * Reset the emulator.
+    */
+    pub fn reset(&mut self) {
+        self.pc = START_ADDR;
+        self.ram = [0; RAM_SIZE];
+        self.screen = [false; SCREEN_WIDTH*SCREEN_HEIGHT];
+        self.v_reg = [0; NUM_REGS];
+        self.i_reg = 0;
+        self.sp = 0;
+        self.stack = [0; STACK_SIZE];
+        self.keys = [false; NUM_KEYS];
+        self.dt = 0;
+        self.st = 0;
+        self.ram[..FONTSET_SIZE].copy_from_slice(&FONTSET);
+    }
+
+    /**
+    * Push 16b into stack and increment sp.
+    */
+    fn push(&mut self, val: u16) {
+        self.stack[sp as usize] = val;
+        sp += 1;
+    }
+
+    /**
+    * Pop 16b from stack and decrement sp.
+    */
+    fn pop(&mut self) -> u16 {
+        sp -= 1;
+        return self.stack[sp as usize];
+    }
+
+    /**
+    * Fetch instruction from RAM.
+    */
+    fn fetch(&mut self)->u16 {
+        let higher_byte = self.ram[self.pc as usize] as u16;
+        let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
+
+        let op = (higher_byte << 8) | lower_byte;
+
+        self.pc += 2;
+
+        return op;
+    }
+
+    /**
+    * Tick the state of the system.
+    */
+    pub fn tick(&mut self) {
+        let op = self.fetch ();
+
+        self.execute(op);
+    }
+
+    /**
+     * Tick the timers.
+     */
+    pub fn tick_timers(&mut self) {
+        if self.dt > 0 {
+            self.dt -= 1;
+        }
+
+        if self.st > 0 {
+            if self.st == 1 {
+                //BEEP
+            }
+            self.st -= 1;
+        }
+    }
+
+    /**
+    * Execute opcode.
+    */
+    fn execute(&mut self, op: u16){
+        let digit1 = (op & 0xF000) >> 12;
+        let digit2 = (op & 0x0F00) >> 8;
+        let digit3 = (op & 0x00F0) >> 4;
+        let digit4 = op & 0x000F;
+
+        match(digit1, digit2, digit3, digit4) {
+            // NOP
+            (0, 0, 0, 0) => return,
+
+            // CLS - clear screen
+            (0, 0, 0xE, 0) => {
+                self.screen = [false; SCREEN_HEIGHT*SCREEN_WIDTH];
+            }
+
+            // RET - return from subroutine
+            (0, 0, 0xE, 0xE) => {
+                let ret_addr = self.pop();
+                self.pc = ret_addr;
+            }
+
+            // JMP NNN - jump to address NNN
+            (1, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.pc = nnn;
+            }
+
+            // CALL NNN - call subroutine at address NNN
+            (2, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.push(self.pc);
+                self.pc = nnn;
+            }
+
+            // 3XNN - skip next op if VX == NN
+            (3, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+
+                if (self.v_reg[x] == nn) {
+                    self.pc += 2;
+                }
+            }
+
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
     }
 }
