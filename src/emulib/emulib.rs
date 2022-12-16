@@ -1,3 +1,5 @@
+use rand::random;
+
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
@@ -151,26 +153,26 @@ impl Emu {
             // CLS - clear screen
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_HEIGHT*SCREEN_WIDTH];
-            }
+            },
 
             // RET - return from subroutine
             (0, 0, 0xE, 0xE) => {
                 let ret_addr = self.pop();
                 self.pc = ret_addr;
-            }
+            },
 
             // JMP NNN - jump to address NNN
             (1, _, _, _) => {
                 let nnn = op & 0xFFF;
                 self.pc = nnn;
-            }
+            },
 
             // CALL NNN - call subroutine at address NNN
             (2, _, _, _) => {
                 let nnn = op & 0xFFF;
                 self.push(self.pc);
                 self.pc = nnn;
-            }
+            },
 
             // 3XNN - skip next op if VX == NN
             (3, _, _, _) => {
@@ -180,7 +182,7 @@ impl Emu {
                 if (self.v_reg[x] == nn) {
                     self.pc += 2;
                 }
-            }
+            },
 
             // 4XNN - skip next op if VX != NN
             (4, _, _, _) => {
@@ -190,17 +192,17 @@ impl Emu {
                 if (self.v_reg[x] != nn) {
                     self.pc += 2;
                 }
-            }
+            },
 
             // 5XY0 - skip next op VX == VY
-            (5, _, _, _) => {
+            (5, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
                 if (self.v_reg[x] == self.v_reg[y]) {
                     self.pc += 2;
                 }
-            }
+            },
 
             // 6XNN - copy into VX value NN
             (6, _, _, _) => {
@@ -208,7 +210,7 @@ impl Emu {
                 let nn = (op & 0xFF) as u8;
 
                 self.v_reg[x] = nn;
-            }
+            },
 
             // 7XNN - add to VX value NN
             (7, _, _, _) => {
@@ -216,7 +218,7 @@ impl Emu {
                 let nn = (op & 0xFF) as u8;
 
                 self.v_reg[x] = self.v_reg[x].wrapping_add(nn);
-            }
+            },
 
             // 8XY0 - copy into VX value of VY
             (8, _, _, 0) => {
@@ -224,7 +226,7 @@ impl Emu {
                 let y = digit3 as usize;
 
                 self.v_reg[x] = self.v_reg[y];
-            }
+            },
 
             // 8XY1 - VX = VX or VY
             (8, _, _, 1) => {
@@ -232,7 +234,7 @@ impl Emu {
                 let y = digit3 as usize;
 
                 self.v_reg[x] |= self.v_reg[y];
-            }
+            },
 
             // 8XY2 - VX = VX and VY
             (8, _, _, 2) => {
@@ -240,7 +242,7 @@ impl Emu {
                 let y = digit3 as usize;
 
                 self.v_reg[x] &= self.v_reg[y];
-            }
+            },
 
             // 8XY3 - VX = VX xor VY
             (8, _, _, 3) => {
@@ -248,7 +250,7 @@ impl Emu {
                 let y = digit3 as usize;
 
                 self.v_reg[x] |= self.v_reg[y];
-            }
+            },
 
             // 8XY4 - VX += VY
             (8, _, _, 4) => {
@@ -260,6 +262,151 @@ impl Emu {
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
+            },
+
+            // 8XY5 - VX -= VY
+            (8, _, _, 5) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[x].overflowing_sub(self.v_reg[y]);
+                let new_vf = (if carry { 1 } else { 0 }) as u8;
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            },
+
+            // 8XY6 - VX >>= 1
+            (8, _, _, 6) => {
+                let x = digit2 as usize;
+                let lsb = self.v_reg[x] & 1;
+
+                self.v_reg[x] >>= 1;
+                self.v_reg[0xF] = lsb;
+            },
+
+            // 8XY7 - VX = VY - VX
+            (8, _, _, 7) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[y].overflowing_sub(self.v_reg[x]);
+                let new_vf = (if carry { 1 } else { 0 }) as u8;
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            },
+
+            // 8XYE - VX <<= 1
+            (8, _, _, 0xE) => {
+                let x = digit2 as usize;
+                let msb = (self.v_reg[x] >> 7) & 1;
+
+                self.v_reg[x] <<= 1;
+                self.v_reg[0xF] = msb;
+            },
+
+            // 9XY0 - skip op if VX != VY
+            (9, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if (self.v_reg[x] != self.v_reg[y]) {
+                    self.pc += 2;
+                }
+            },
+
+            // ANNN - copy value NNN into I
+            (0xA, _, _, _) => {
+                let nnn = op & 0xFFF;
+
+                self.i_reg = nnn;
+            },
+
+            // BNNN - jump to V0 + NNN
+            (0xB, _, _, _) => {
+                let nnn = op & 0xFFF;
+
+                self.pc = (self.v_reg[0] as u16) + nnn;
+            },
+
+            // CXNN - VX = rand() & NN
+            (0xC, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                let rng: u8 = random();
+
+                self.v_reg[x] = rng & nn;
+            },
+
+            // DXYN - draw sprite
+            (0xD, _, _, _) => {
+                // get coords for sprite
+                let x_coord = self.v_reg[digit2 as usize] as u16;
+                let y_coord = self.v_reg[digit2 as usize] as u16;
+
+                // get the number of rows of the sprite
+                let num_rows = digit4;
+
+                // track if any pixels flipped
+                let mut flipped = false;
+
+                for y_line in 0..num_rows {
+                    // determine memory address of row of pixels
+                    let addr = self.i_reg + y_line;
+                    let pixels = self.ram[addr as usize];
+
+                    // iterate over each pixel in the row
+                    for x_line in 0..8 {
+                        // get current pixel via mask, flip only if pixel is 1
+                        if (pixels & (0b1000_0000 >> x_line)) != 0 {
+                            let x = (x_coord + x_line) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + y_line) as usize % SCREEN_HEIGHT;
+
+                            // get array index of pixel on screen
+                            let idx = x + y * SCREEN_WIDTH;
+
+                            // if on screen pixel also 1, flip
+                            flipped |= self.screen[idx];
+                            self.screen[idx] ^= true;
+                        }
+                    }
+                }
+
+                // update VF
+                if flipped {
+                    self.v_reg[0xF] = 1;
+                } else {
+                    self.v_reg[0xF] = 0;
+                }
+            },
+
+            // EX9E - skip op if key in VX pressed
+            (0xE, _, 9, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x] as usize;
+                let key = self.keys[vx];
+
+                if key {
+                    self.pc += 2;
+                }
+            },
+
+            // EXA1 - skip op if key in VX pressed
+            (0xE, _, 0xA, 1) => {
+                let x = digit2 as usize;
+                let vx = self.v_reg[x] as usize;
+                let key = self.keys[vx];
+
+                if !key {
+                    self.pc += 2;
+                }
+            },
+
+            // FX07 - copy DT into VX
+            (0xF, _, 0, 7) => {
+                let x = digit2 as usize;
+                self.v_reg[x] = self.dt;
             }
 
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
