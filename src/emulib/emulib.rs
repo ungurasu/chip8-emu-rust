@@ -45,7 +45,7 @@ impl Emu {
      * Constructor
      */
     pub fn new() -> Self {
-        new_emu = Self {
+        let mut new_emu = Self {
             pc: START_ADDR,
             ram: [0; RAM_SIZE],
             screen: [false; SCREEN_HEIGHT * SCREEN_WIDTH],
@@ -84,16 +84,16 @@ impl Emu {
     * Push 16b into stack and increment sp.
     */
     fn push(&mut self, val: u16) {
-        self.stack[sp as usize] = val;
-        sp += 1;
+        self.stack[self.sp as usize] = val;
+        self.sp += 1;
     }
 
     /**
     * Pop 16b from stack and decrement sp.
     */
     fn pop(&mut self) -> u16 {
-        sp -= 1;
-        return self.stack[sp as usize];
+        self.sp -= 1;
+        return self.stack[self.sp as usize];
     }
 
     /**
@@ -180,6 +180,86 @@ impl Emu {
                 if (self.v_reg[x] == nn) {
                     self.pc += 2;
                 }
+            }
+
+            // 4XNN - skip next op if VX != NN
+            (4, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xff) as u8;
+
+                if (self.v_reg[x] != nn) {
+                    self.pc += 2;
+                }
+            }
+
+            // 5XY0 - skip next op VX == VY
+            (5, _, _, _) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if (self.v_reg[x] == self.v_reg[y]) {
+                    self.pc += 2;
+                }
+            }
+
+            // 6XNN - copy into VX value NN
+            (6, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+
+                self.v_reg[x] = nn;
+            }
+
+            // 7XNN - add to VX value NN
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+
+                self.v_reg[x] = self.v_reg[x].wrapping_add(nn);
+            }
+
+            // 8XY0 - copy into VX value of VY
+            (8, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] = self.v_reg[y];
+            }
+
+            // 8XY1 - VX = VX or VY
+            (8, _, _, 1) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] |= self.v_reg[y];
+            }
+
+            // 8XY2 - VX = VX and VY
+            (8, _, _, 2) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] &= self.v_reg[y];
+            }
+
+            // 8XY3 - VX = VX xor VY
+            (8, _, _, 3) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                self.v_reg[x] |= self.v_reg[y];
+            }
+
+            // 8XY4 - VX += VY
+            (8, _, _, 4) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[x].overflowing_add(self.v_reg[y]);
+                let new_vf = (if carry { 1 } else { 0 }) as u8;
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
             }
 
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
