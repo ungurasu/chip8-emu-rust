@@ -1,5 +1,6 @@
 use rand::random;
 
+pub const SCALE: u32 = 15;
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
@@ -488,5 +489,28 @@ impl Emu {
 
             (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
         }
+    }
+
+    /**
+    * Pass pointer to screen buffer array.
+    */
+    pub fn get_display(&self) -> &[bool] {
+        return &self.screen;
+    }
+
+    /**
+    * Set keypress state in array.
+    */
+    pub fn keypress(&mut self, idx: usize, pressed: bool) {
+        self.keys[idx] = pressed;
+    }
+
+    /**
+    * Load program into RAM.
+    */
+    pub fn load(&mut self, data: &[u8]) {
+        let start = START_ADDR as usize;
+        let end = (START_ADDR as usize) + data.len();
+        self.ram[start..end].copy_from_slice(data);
     }
 }
