@@ -3,6 +3,7 @@ use rand::random;
 pub const SCALE: u32 = 15;
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
+pub const TICKS_PER_FRAME: usize = 10;
 
 const RAM_SIZE: usize = 4096;
 const NUM_REGS: usize = 16;
@@ -270,8 +271,8 @@ impl Emu {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
-                let (new_vx, carry) = self.v_reg[x].overflowing_sub(self.v_reg[y]);
-                let new_vf = (if carry { 1 } else { 0 }) as u8;
+                let (new_vx, borrow) = self.v_reg[x].overflowing_sub(self.v_reg[y]);
+                let new_vf = (if borrow { 0 } else { 1 }) as u8;
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
@@ -344,7 +345,7 @@ impl Emu {
             (0xD, _, _, _) => {
                 // get coords for sprite
                 let x_coord = self.v_reg[digit2 as usize] as u16;
-                let y_coord = self.v_reg[digit2 as usize] as u16;
+                let y_coord = self.v_reg[digit3 as usize] as u16;
 
                 // get the number of rows of the sprite
                 let num_rows = digit4;
@@ -364,6 +365,7 @@ impl Emu {
                             let x = (x_coord + x_line) as usize % SCREEN_WIDTH;
                             let y = (y_coord + y_line) as usize % SCREEN_HEIGHT;
 
+                            //println!("draw x {} y {}", x, y);
                             // get array index of pixel on screen
                             let idx = x + y * SCREEN_WIDTH;
 
