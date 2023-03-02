@@ -251,7 +251,7 @@ impl Emu {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
-                self.v_reg[x] |= self.v_reg[y];
+                self.v_reg[x] ^= self.v_reg[y];
             },
 
             // 8XY4 - VX += VY
@@ -293,7 +293,7 @@ impl Emu {
                 let y = digit3 as usize;
 
                 let (new_vx, carry) = self.v_reg[y].overflowing_sub(self.v_reg[x]);
-                let new_vf = (if carry { 1 } else { 0 }) as u8;
+                let new_vf = (if carry { 0 } else { 1 }) as u8;
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
